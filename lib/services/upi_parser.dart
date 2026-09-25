@@ -45,15 +45,18 @@ ParsedUpiPayment? parseTransactionText(String text, {DateTime? date}) {
       lower.contains('txn of') ||
       lower.contains('transfer to');
 
-  // Exclude non-debits, OTPs, credits, statements
-  // Note: Only exclude if it's explicitly a credit/inward transfer or OTP/statement.
-  // Do NOT exclude just because the merchant "received" the payment.
-  final isCredit = lower.contains('credited') ||
-      lower.contains('received from') ||
-      lower.contains('received in your account') ||
-      lower.contains('credited to');
+  // Inward credit to user's account (only exclude if it's not a debit)
+  final isAccountCredited = (lower.contains('credited') && (
+          lower.contains('to your account') ||
+          lower.contains('in your account') ||
+          lower.contains('to your a/c') ||
+          lower.contains('to a/c') ||
+          lower.contains('has been credited with') ||
+          lower.contains('credited with inr') ||
+          lower.contains('credited with rs')
+      )) || lower.contains('received from') || lower.contains('received in your account');
 
-  final isExcluded = isCredit ||
+  final isExcluded = (!lower.contains('debited') && isAccountCredited) ||
       lower.contains('refund') ||
       lower.contains('otp') ||
       lower.contains('verification code') ||

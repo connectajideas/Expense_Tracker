@@ -21,6 +21,7 @@ class SmsService {
     _channel.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'onNotificationTapped':
+        case 'onPaymentDetected':
         case 'onSmsReceived':
           final payload = call.arguments as String?;
           if (payload != null && payload.isNotEmpty) {
@@ -31,21 +32,60 @@ class SmsService {
     });
   }
 
-    /// Checks if SMS AND notification permissions are granted
+  /// Checks if Notification Listener Service (special access for GPay/PhonePe) is enabled
+  Future<bool> isNotificationListenerGranted() async {
+    try {
+      final granted = await _channel.invokeMethod<bool>('isNotificationListenerGranted');
+      return granted ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens Android Settings to let user enable Expensy in "Notification access"
+  Future<void> openNotificationListenerSettings() async {
+    try {
+      await _channel.invokeMethod('openNotificationListenerSettings');
+    } catch (_) {}
+  }
+
+  /// Checks if SMS permission is granted
+  Future<bool> isSmsGranted() async {
+    return await Permission.sms.isGranted;
+  }
+
+  /// Requests SMS permission
+  Future<bool> requestSmsPermission() async {
+    final status = await Permission.sms.request();
+    return status.isGranted;
+  }
+
+  /// Checks if normal notifications (POST_NOTIFICATIONS) are enabled
+  Future<bool> isNotificationPermissionGranted() async {
+    return await Permission.notification.isGranted;
+  }
+
+  /// Request normal notifications permission (Android 13+)
+  Future<bool> requestNotificationPermission() async {
+    final status = await Permission.notification.request();
+    return status.isGranted;
+  }
+
+  /// Checks if both SMS and notification permissions are granted (legacy method)
   Future<bool> isPermissionGranted() async {
     final smsStatus = await Permission.sms.status;
     final notifStatus = await Permission.notification.status;
     return smsStatus.isGranted && notifStatus.isGranted;
   }
 
-  /// Requests SMS and notification permissions from user
+  /// Requests SMS and notification permissions (legacy method)
   Future<bool> requestPermission() async {
     final notifStatus = await Permission.notification.request();
     final smsStatus = await Permission.sms.request();
     return smsStatus.isGranted && notifStatus.isGranted;
   }
 
-  /// Checks if the app was opened by tapping an SMS debit notification
+  /// Checks if the app was opened by tapping an auto-capture notification
   Future<String?> getLaunchPayload() async {
     try {
       final payload = await _channel.invokeMethod<String>('getLaunchPayload');
@@ -58,7 +98,7 @@ class SmsService {
   /// Scans the last 50 SMS messages in the inbox and returns parsed debit transactions
   Future<List<ParsedUpiPayment>> scanRecentSms() async {
     try {
-      final hasPerm = await isPermissionGranted();
+      final hasPerm = await isSmsGranted();
       if (!hasPerm) return [];
 
       final rawList = await _channel.invokeListMethod<Map>('readRecentSms');

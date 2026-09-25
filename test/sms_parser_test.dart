@@ -51,6 +51,14 @@ void main() {
       expect(parsed.merchant.toLowerCase(), contains('chai point'));
     });
 
+    test('Debit SMS mentioning credited to merchant', () {
+      const sms = 'Rs 250.00 debited from A/c XX1234 on 25-09-26 towards UPI. Credited to Dominos.';
+      final parsed = parseTransactionText(sms);
+      expect(parsed, isNotNull);
+      expect(parsed!.amount, 250.0);
+      expect(parsed.merchant.toLowerCase(), contains('dominos'));
+    });
+
     test('SBI debit for format', () {
       const sms = 'Your a/c no. XX1234 debited for Rs.250.00 on 25-09-26 by transfer to Dominos.';
       final parsed = parseTransactionText(sms);
@@ -75,6 +83,36 @@ void main() {
       const sms = 'Refund of INR 150.00 received from Swiggy to your A/c ending 1234.';
       final parsed = parseTransactionText(sms);
       expect(parsed, isNull);
+    });
+  });
+
+  group('UPI App Push Notification Parser Tests', () {
+    test('Google Pay: Paid ₹150.00 to Chai Point', () {
+      final parsed = parseUpiNotification('Paid ₹150.00 to Chai Point', 'Completed');
+      expect(parsed, isNotNull);
+      expect(parsed!.amount, 150.0);
+      expect(parsed.merchant.toLowerCase(), contains('chai point'));
+    });
+
+    test('PhonePe: Paid ₹200 to Starbucks', () {
+      final parsed = parseUpiNotification('Paid ₹200 to Starbucks', '₹200 debited from A/c XX1234');
+      expect(parsed, isNotNull);
+      expect(parsed!.amount, 200.0);
+      expect(parsed.merchant.toLowerCase(), contains('starbucks'));
+    });
+
+    test('Paytm: Paid ₹75 to Sharma Groceries', () {
+      final parsed = parseUpiNotification('Paid ₹75 to Sharma Groceries', 'Payment successful');
+      expect(parsed, isNotNull);
+      expect(parsed!.amount, 75.0);
+      expect(parsed.merchant.toLowerCase(), contains('sharma'));
+    });
+
+    test('CRED: Paid ₹1,200 to Cult Fit', () {
+      final parsed = parseUpiNotification('Paid ₹1,200 to Cult Fit', 'UPI transaction completed');
+      expect(parsed, isNotNull);
+      expect(parsed!.amount, 1200.0);
+      expect(parsed.merchant.toLowerCase(), contains('cult fit'));
     });
   });
 }

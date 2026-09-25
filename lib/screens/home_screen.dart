@@ -16,11 +16,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   double _spent = 0;
   double? _limit;
   List<Expense> _expenses = [];
   bool _smsEnabled = false;
+  bool _notifListenerEnabled = false;
   bool _isScanning = false;
 
   DateTime get _monthStart {
@@ -36,34 +37,57 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
-    _checkSmsPermission();
+    _checkPermissions();
   }
 
-  Future<void> _checkSmsPermission() async {
-    final granted = await SmsService.instance.isPermissionGranted();
-    if (mounted) {
-      setState(() => _smsEnabled = granted);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissions();
     }
+  }
+
+  Future<void> _checkPermissions() async {
+    final smsGranted = await SmsService.instance.isSmsGranted();
+    final notifListenerGranted =
+        await SmsService.instance.isNotificationListenerGranted();
+    if (mounted) {
+      setState(() {
+        _smsEnabled = smsGranted;
+        _notifListenerEnabled = notifListenerGranted;
+      });
+    }
+  }
+
+  Future<void> _enableUpiNotifications() async {
+    await SmsService.instance.openNotificationListenerSettings();
   }
 
   Future<void> _toggleSmsCapture(bool value) async {
     if (value) {
-      final granted = await SmsService.instance.requestPermission();
+      final granted = await SmsService.instance.requestSmsPermission();
       if (mounted) {
         setState(() => _smsEnabled = granted);
       }
       if (granted && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('SMS Auto-Capture enabled! Bank debits will alert automatically.'),
+            content: Text('Bank SMS capture enabled!'),
             duration: Duration(seconds: 3),
           ),
         );
       } else if (!granted && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('SMS/Notification permission required. Enable in app settings.'),
+            content: const Text('SMS permission required. Enable in app settings.'),
             action: SnackBarAction(
               label: 'Settings',
               onPressed: () => openAppSettings(),
@@ -78,14 +102,196 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showAutoCaptureDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.bolt, color: Colors.teal, size: 28),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Auto-Capture Settings',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Option 1: UPI App Push Notifications (Google Pay, PhonePe, Paytm, CRED)
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _notifListenerEnabled
+                        ? Colors.teal.shade300
+                        : Colors.orange.shade300,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  color: _notifListenerEnabled
+                      ? Colors.teal.shade50
+                      : Colors.orange.shade50,
+                ),
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _notifListenerEnabled
+                              ? Icons.check_circle
+                              : Icons.warning_amber,
+                          color: _notifListenerEnabled
+                              ? Colors.teal
+                              : Colors.orange.shade800,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'UPI Apps (GPay, PhonePe, Paytm, CRED)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        if (_notifListenerEnabled)
+                          const Text(
+                            'Active',
+                            style: TextStyle(
+                              color: Colors.teal,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        else
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            onPressed: () {
+                              _enableUpiNotifications();
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text('Enable'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _notifListenerEnabled
+                          ? 'Catches payments instantly from Google Pay, PhonePe, Paytm & CRED notifications.'
+                          : 'Tap "Enable" to grant Notification Access in Android Settings so Expensy can catch UPI transactions.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Option 2: Bank SMS Backup
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _smsEnabled
+                        ? Colors.teal.shade300
+                        : Colors.grey.shade300,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  color: _smsEnabled ? Colors.teal.shade50 : Colors.grey.shade50,
+                ),
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(
+                      _smsEnabled ? Icons.sms : Icons.sms_outlined,
+                      color: _smsEnabled ? Colors.teal : Colors.grey.shade600,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Bank SMS Backup',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            'Detects debit SMS sent by banks (SBI, HDFC, ICICI, etc.)',
+                            style: TextStyle(fontSize: 12, color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _smsEnabled,
+                      onChanged: (val) async {
+                        await _toggleSmsCapture(val);
+                        setModalState(() {});
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Samsung One UI / Device tip
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.blueGrey, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Samsung One UI Tip: Set Expensy battery usage to "Unrestricted" in App Info so background alerts are never delayed.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blueGrey.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _scanRecentSms() async {
-    final hasPerm = await SmsService.instance.isPermissionGranted();
+    final hasPerm = await SmsService.instance.isSmsGranted();
     if (!hasPerm) {
-      final granted = await SmsService.instance.requestPermission();
+      final granted = await SmsService.instance.requestSmsPermission();
       if (!granted) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('SMS permission is required to scan bank messages')),
+            const SnackBar(
+              content: Text('SMS permission is required to scan bank messages'),
+            ),
           );
         }
         return;
@@ -123,8 +329,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Icon(Icons.mark_email_read, color: Colors.teal),
                   const SizedBox(width: 8),
                   Text(
-                    'Recent Bank Debits (${results.length})',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    'Found ${results.length} Bank Transactions',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -134,9 +343,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ListView.separated(
                 controller: scrollController,
                 itemCount: results.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (_, i) {
-                  final item = results[i];
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = results[index];
                   final dateStr = item.date != null
                       ? '${item.date!.day}/${item.date!.month} ${item.date!.hour.toString().padLeft(2, '0')}:${item.date!.minute.toString().padLeft(2, '0')}'
                       : '';
@@ -145,14 +354,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       backgroundColor: Colors.teal,
                       child: Icon(Icons.receipt_long, color: Colors.white, size: 20),
                     ),
-                    title: Text(item.merchant, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(dateStr.isNotEmpty ? 'Debit · $dateStr' : 'Bank Debit'),
+                    title: Text(
+                      item.merchant,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      dateStr.isNotEmpty ? 'Debit · $dateStr' : 'Bank Debit',
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           '₹${item.amount.toStringAsFixed(0)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         FilledButton.tonal(
@@ -231,16 +448,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final remaining = (_limit ?? 0) - _spent;
     final overLimit = _limit != null && _spent > _limit!;
+    final isAutoActive = _notifListenerEnabled || _smsEnabled;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Expense Tracker'),
         actions: [
-          Row(
-            children: [
-              const Text('SMS Auto', style: TextStyle(fontSize: 12)),
-              Switch(value: _smsEnabled, onChanged: _toggleSmsCapture),
-            ],
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: isAutoActive ? Colors.teal : Colors.orange.shade800,
+            ),
+            icon: Icon(
+              isAutoActive ? Icons.bolt : Icons.flash_off,
+              size: 18,
+            ),
+            label: Text(
+              isAutoActive ? 'Auto ON' : 'Setup Auto',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            onPressed: _showAutoCaptureDialog,
           ),
           IconButton(
             icon: _isScanning
@@ -268,31 +494,34 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          if (!_smsEnabled)
+          if (!_notifListenerEnabled)
             Card(
               margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              color: Colors.teal.shade50,
+              color: Colors.orange.shade50,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.teal.shade200),
+                side: BorderSide(color: Colors.orange.shade200),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: Row(
                   children: [
-                    const Icon(Icons.flash_on, color: Colors.teal, size: 28),
+                    Icon(Icons.bolt, color: Colors.orange.shade800, size: 28),
                     const SizedBox(width: 10),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Enable Auto-Capture',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            'Enable UPI Auto-Capture',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           Text(
-                            'Auto-detect UPI & bank debit SMS when you pay',
+                            'Catch payments from Google Pay, PhonePe, Paytm',
                             style: TextStyle(fontSize: 11, color: Colors.black87),
                           ),
                         ],
@@ -300,11 +529,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     FilledButton(
                       style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange.shade800,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         visualDensity: VisualDensity.compact,
                       ),
-                      onPressed: () => _toggleSmsCapture(true),
-                      child: const Text('Enable', style: TextStyle(fontSize: 12)),
+                      onPressed: _showAutoCaptureDialog,
+                      child: const Text('Setup', style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
