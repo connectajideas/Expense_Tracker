@@ -192,7 +192,7 @@ object PaymentNotificationHelper {
                     description = "UPI auto-capture alerts and budget warnings"
                     enableVibration(true)
                     enableLights(true)
-                    lightColor = Color.TEAL
+                    lightColor = Color.parseColor("#008080")
                     vibrationPattern = longArrayOf(0, 250, 100, 250)
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
