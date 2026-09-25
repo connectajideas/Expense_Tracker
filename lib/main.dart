@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'screens/home_screen.dart';
 import 'screens/add_expense_screen.dart';
 import 'services/app_notifications.dart';
@@ -12,9 +13,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppNotifications.init();
   SmsService.instance.init();
+
+  // Ask for POST_NOTIFICATIONS (Android 13+) up front, regardless of
+  // whether the user ever flips the SMS Auto-Capture switch.
+  await Permission.notification.request();
+
   runApp(const MyApp());
 }
-
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 

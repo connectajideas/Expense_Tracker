@@ -31,18 +31,18 @@ class SmsService {
     });
   }
 
-  /// Checks if SMS permissions are granted
+    /// Checks if SMS AND notification permissions are granted
   Future<bool> isPermissionGranted() async {
-    final status = await Permission.sms.status;
-    return status.isGranted;
+    final smsStatus = await Permission.sms.status;
+    final notifStatus = await Permission.notification.status;
+    return smsStatus.isGranted && notifStatus.isGranted;
   }
 
   /// Requests SMS and notification permissions from user
   Future<bool> requestPermission() async {
-    final status = await Permission.sms.request();
-    // Also request notification permission on Android 13+
-    await Permission.notification.request();
-    return status.isGranted;
+    final notifStatus = await Permission.notification.request();
+    final smsStatus = await Permission.sms.request();
+    return smsStatus.isGranted && notifStatus.isGranted;
   }
 
   /// Checks if the app was opened by tapping an SMS debit notification
